@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: cyber-news-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-cyber_news}
+      MYSQL_USER: ${MYSQL_USER:-cybernews}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      TZ: Asia/Kolkata
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - cyber-news-network
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  cyber-news:
+    build: .
+    container_name: cyber-news-sender
+    restart: unless-stopped
+    env_file:
+      - config/.env
+    volumes:
+      - ./data/logs:/app/data/logs
+      - ./config/.env:/app/config/.env
+    networks:
+      - cyber-news-network
+    environment:
+      - TZ=Asia/Kolkata
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  web-dashboard:
+    build: .
+    container_name: cyber-news-web
+    restart: unless-stopped
+    env_file:
+      - config/.env
+    volumes:
+      - ./data/logs:/app/data/logs
+      - ./config/.env:/app/config/.env
+    ports:
+      - "5000:5000"
+    networks:
+      - cyber-news-network
+    command: gunicorn --bind 0.0.0.0:5000 --workers 4 --timeout 120 --access-logfile - --error-logfile - --log-level info src.web_app:app
+    depends_on:
+      - mysql
+      - cyber-news
+
+volumes:
+  mysql_data:
+    driver: local
+
+networks:
+  cyber-news-network:
+    driver: bridge
