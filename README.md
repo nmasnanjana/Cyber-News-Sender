@@ -302,15 +302,3 @@ python3 -m src.web_app
 ### Adding New RSS Feeds
 
 Edit `src/cyber_news_scraper.py` and add a new scraping method following the existing pattern.
-
-## License
-
-[Add your license here]
-
-## Contributing
-
-[Add contribution guidelines if applicable]
-
-## Support
-
-For issues and questions, please open an issue on GitHub.
