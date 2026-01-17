@@ -1,10 +1,11 @@
-version: '3.8'
 
 services:
   mysql:
     image: mysql:8.0
     container_name: cyber-news-mysql
     restart: unless-stopped
+    env_file:
+      - config/.env
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-cyber_news}
