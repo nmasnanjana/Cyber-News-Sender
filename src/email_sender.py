@@ -8,6 +8,7 @@ import smtplib
 import json
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.utils import formatdate
 from datetime import datetime
 from typing import List, Dict
 import os
@@ -377,6 +378,7 @@ Stay informed, stay secure!
             # BCC recipients are NOT added to headers - they're only in sendmail() call
             msg['To'] = self.config['sender_email']
             msg['Subject'] = f"{self.config['subject_prefix']} - {datetime.now().strftime('%B %d, %Y')}"
+            msg['Date'] = formatdate(localtime=True)  # Required header for email compliance
             
             # Create HTML and text versions
             html_content = self.format_articles_html(articles)
