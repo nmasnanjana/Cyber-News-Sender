@@ -16,8 +16,8 @@ services:
       - mysql_data:/var/lib/mysql
     networks:
       - cyber-news-network
-    ports:
-      - "3306:3306"
+    # Port NOT exposed - database is only accessible within Docker network
+    # Remove ports mapping for security - containers communicate via internal network
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
