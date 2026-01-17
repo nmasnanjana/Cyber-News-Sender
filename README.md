@@ -73,8 +73,25 @@ WEB_PORT=5000
 
 ### 3. Start Services
 
+**Important**: Docker Compose needs to read the `.env` file for variable substitution. Use one of these methods:
+
+**Option 1: Use --env-file flag (Recommended)**
 ```bash
-docker-compose up -d --build
+docker compose --env-file config/.env up -d --build
+```
+
+**Option 2: Create a root-level .env file (Alternative)**
+```bash
+# Create a symlink or copy config/.env to root directory
+ln -s config/.env .env
+# Then run normally
+docker compose up -d --build
+```
+
+**Option 3: Export variables before running**
+```bash
+export $(cat config/.env | grep -v '^#' | xargs)
+docker compose up -d --build
 ```
 
 This starts three services:
