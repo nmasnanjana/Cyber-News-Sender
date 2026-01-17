@@ -24,7 +24,7 @@ Automated cybersecurity news aggregator with email distribution, web dashboard, 
 
 - Docker and Docker Compose installed
 - Port for web dashboard (default: 5000, configurable via `WEB_PORT` in `.env`)
-- Port 3306 available for MySQL (optional, can be changed)
+- **Note**: MySQL database is not exposed externally - it's only accessible within the Docker network for security
 
 ## Quick Start
 
