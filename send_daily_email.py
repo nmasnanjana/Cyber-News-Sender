@@ -22,11 +22,11 @@ def main():
         # Initialize email sender (uses database)
         sender = CyberNewsEmailSender(use_db=True)
         
-        # Get articles from database (today's articles)
-        articles_for_email = sender.db.get_recent_articles(days=1, limit=100)
+        # Get articles from database (today's articles that haven't been sent yet)
+        articles_for_email = sender.db.get_unsent_articles_today(limit=100)
         
         if not articles_for_email:
-            logger.info("No articles found for today. Email not sent.")
+            logger.info("No unsent articles found for today. Email not sent.")
             return
         
         logger.info(f"Found {len(articles_for_email)} articles to send")
@@ -42,7 +42,16 @@ def main():
         logger.info(f"Found {recipient_count} active recipients in database")
         
         # Send email (recipients are fetched from database inside send_email)
-        sender.send_email([a.to_dict() for a in articles_for_email])
+        article_dicts = [a.to_dict() for a in articles_for_email]
+        email_sent = sender.send_email(article_dicts)
+        
+        # Mark articles as sent only if email was successfully sent
+        if email_sent:
+            article_ids = [a.id for a in articles_for_email]
+            sender.db.mark_articles_as_sent(article_ids)
+            logger.info(f"Marked {len(article_ids)} articles as sent")
+        else:
+            logger.warning("Email sending failed. Articles not marked as sent.")
         
         # Generate analytics
         try:

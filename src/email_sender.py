@@ -345,6 +345,9 @@ Stay informed, stay secure!
         
         Args:
             articles: List of article dictionaries from MySQL database
+            
+        Returns:
+            True if email was sent successfully, False otherwise
         """
         if not articles:
             print("No articles to send. Email not sent.")

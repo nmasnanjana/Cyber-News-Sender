@@ -34,6 +34,7 @@ class Article(Base):
     content = Column(Text)  # Full article content
     cve_details = Column(Text)  # JSON object with CVE details
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    last_sent_at = Column(DateTime, nullable=True, index=True)  # Track when article was last sent via email
     
     def to_dict(self):
         return {
@@ -49,7 +50,8 @@ class Article(Base):
             'summary': self.summary,
             'content': self.content,
             'cve_details': json.loads(self.cve_details) if self.cve_details else {},
-            'created_at': self.created_at.isoformat() if self.created_at else None
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'last_sent_at': self.last_sent_at.isoformat() if self.last_sent_at else None
         }
 
 # Create indexes for performance
@@ -57,6 +59,7 @@ Index('idx_articles_date', Article.date)
 Index('idx_articles_source', Article.source)
 Index('idx_articles_url', Article.url)
 Index('idx_articles_content_hash', Article.content_hash)
+Index('idx_articles_last_sent_at', Article.last_sent_at)
 
 class Recipient(Base):
     __tablename__ = 'recipients'
@@ -189,6 +192,11 @@ class Database:
                     conn.execute(text("ALTER TABLE articles ADD COLUMN mitre_attack_ids TEXT"))
                     conn.commit()
                     logger.info("Added 'mitre_attack_ids' column to articles table")
+                
+                if 'last_sent_at' not in columns:
+                    conn.execute(text("ALTER TABLE articles ADD COLUMN last_sent_at DATETIME NULL"))
+                    conn.commit()
+                    logger.info("Added 'last_sent_at' column to articles table")
         except Exception as e:
             # If migration fails, log but don't crash
             logger.warning(f"Database migration warning: {e}")
@@ -223,6 +231,10 @@ class Database:
                 
                 if 'idx_articles_content_hash' not in existing_indexes:
                     conn.execute(text("CREATE INDEX idx_articles_content_hash ON articles(content_hash)"))
+                    conn.commit()
+                
+                if 'idx_articles_last_sent_at' not in existing_indexes:
+                    conn.execute(text("CREATE INDEX idx_articles_last_sent_at ON articles(last_sent_at)"))
                     conn.commit()
         except Exception as e:
             logger.warning(f"Index creation warning: {e}")
@@ -405,6 +417,54 @@ class Database:
         return self.session.query(Article).filter(
             Article.date >= today
         ).order_by(Article.date.desc()).all()
+    
+    def get_unsent_articles_today(self, limit=100):
+        """
+        Get articles from today that haven't been sent yet (or weren't sent today).
+        This prevents duplicate email sends on the same day.
+        """
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_date = datetime.utcnow().date()
+        
+        # Get articles from today that either:
+        # 1. Have never been sent (last_sent_at is NULL), OR
+        # 2. Were sent before today (last_sent_at < today_start)
+        return self.session.query(Article).filter(
+            Article.date >= today_date,
+            (
+                (Article.last_sent_at.is_(None)) |
+                (Article.last_sent_at < today_start)
+            )
+        ).order_by(Article.date.desc()).limit(limit).all()
+    
+    def mark_articles_as_sent(self, article_ids):
+        """
+        Mark articles as sent by updating their last_sent_at timestamp.
+        
+        Args:
+            article_ids: List of article IDs to mark as sent
+            
+        Returns:
+            Number of articles successfully marked
+        """
+        if not article_ids:
+            return 0
+        
+        try:
+            now = datetime.utcnow()
+            updated = self.session.query(Article).filter(
+                Article.id.in_(article_ids)
+            ).update(
+                {Article.last_sent_at: now},
+                synchronize_session=False
+            )
+            self.session.commit()
+            logger.info(f"Marked {updated} articles as sent")
+            return updated
+        except Exception as e:
+            self.session.rollback()
+            logger.error(f"Error marking articles as sent: {e}")
+            return 0
     
     def get_articles_by_cve(self, cve_number):
         """Get articles containing specific CVE (using parameterized query to prevent SQL injection)."""
