@@ -1,0 +1,42 @@
+# Environment variables (contains sensitive data)
+.env
+config/.env
+
+# Keep .env.example in git (it's a template)
+!.env.example
+!config/.env.example
+
+# Data files
+data/
+*.db
+*.json
+scraped_history.json
+cyber_news.json
+
+# Logs
+logs/
+*.log
+
+# News data (optional - you may want to track this)
+# cyber_news.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
