@@ -1908,11 +1908,13 @@ def rss_feed():
         </item>"""
         rss_items.append(item)
     
+    # Get port for RSS link
+    web_port = os.getenv('WEB_PORT', '5000')
     rss_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
     <channel>
         <title>Cyber News Feed</title>
-        <link>http://localhost:5000/rss</link>
+        <link>http://localhost:{web_port}/rss</link>
         <description>Daily cybersecurity news, vulnerabilities, and exploitations</description>
         <language>en-us</language>
         <lastBuildDate>{datetime.utcnow().strftime('%a, %d %b %Y %H:%M:%S +0000')}</lastBuildDate>
@@ -2003,4 +2005,6 @@ def create_app():
     return app
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    # Get port from environment variable, default to 5000
+    port = int(os.getenv('WEB_PORT', '5000'))
+    app.run(host='0.0.0.0', port=port, debug=False)

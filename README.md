@@ -23,7 +23,7 @@ Automated cybersecurity news aggregator with email distribution, web dashboard, 
 ## Prerequisites
 
 - Docker and Docker Compose installed
-- Port 5000 available for web dashboard
+- Port for web dashboard (default: 5000, configurable via `WEB_PORT` in `.env`)
 - Port 3306 available for MySQL (optional, can be changed)
 
 ## Quick Start
@@ -66,6 +66,9 @@ EMAIL_SUBJECT_PREFIX=Daily Cybersecurity News
 # Application Configuration
 TZ=Asia/Kolkata
 PYTHONUNBUFFERED=1
+
+# Web Dashboard Configuration
+WEB_PORT=5000
 ```
 
 ### 3. Start Services
@@ -77,7 +80,7 @@ docker-compose up -d --build
 This starts three services:
 - **MySQL**: Database server
 - **cyber-news**: Scraper with cron jobs
-- **web-dashboard**: Web interface on port 5000
+- **web-dashboard**: Web interface (port configurable via `WEB_PORT` in `.env`, default: 5000)
 
 ### 4. Access the Dashboard
 
@@ -85,6 +88,8 @@ Open your browser and navigate to:
 ```
 http://localhost:5000
 ```
+
+**Note**: If you changed the `WEB_PORT` in your `.env` file, use that port instead of 5000.
 
 ## Configuration
 
@@ -99,6 +104,12 @@ All configuration is managed through `config/.env`:
 - `MYSQL_PASSWORD`: Database password (required)
 - `MYSQL_DATABASE`: Database name (default: `cyber_news`)
 - `MYSQL_ROOT_PASSWORD`: MySQL root password (required)
+
+#### Web Dashboard Configuration
+- `WEB_PORT`: Port for the web dashboard (default: `5000`)
+  - Change this if port 5000 is already in use
+  - Update both the environment variable and ensure the port is available
+  - Example: Set `WEB_PORT=8080` to use port 8080 instead
 
 #### Email Configuration
 - `SMTP_SERVER`: SMTP server hostname
