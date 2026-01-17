@@ -642,11 +642,6 @@ class CyberNewsScraper:
                         except Exception as e2:
                             logger.error(f"Error saving individual article: {e2}")
                     logger.info(f"Saved {saved_count} articles (fallback mode)")
-            
-            # Update in-memory history (database is source of truth)
-            for article in recent_articles:
-                normalized_url = self.normalize_url(article.get('url', ''))
-                self.scraped_urls.add(normalized_url)
         
         return recent_articles
     

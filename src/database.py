@@ -55,9 +55,10 @@ class Article(Base):
         }
 
 # Create indexes for performance
+# Note: URL index is created with prefix (255 chars) in _create_indexes() to avoid MySQL key length limit
 Index('idx_articles_date', Article.date)
 Index('idx_articles_source', Article.source)
-Index('idx_articles_url', Article.url)
+# Index('idx_articles_url', Article.url)  # Created manually with prefix in _create_indexes()
 Index('idx_articles_content_hash', Article.content_hash)
 Index('idx_articles_last_sent_at', Article.last_sent_at)
 
@@ -226,7 +227,10 @@ class Database:
                     conn.commit()
                 
                 if 'idx_articles_url' not in existing_indexes:
-                    conn.execute(text("CREATE INDEX idx_articles_url ON articles(url)"))
+                    # Use prefix index for URL (max 255 chars) to avoid "key too long" error
+                    # MySQL has a limit of 3072 bytes for index keys (utf8mb4 = 4 bytes per char = 768 chars max)
+                    # URLs can be up to 1000 chars, so we use a prefix of 255 chars which is sufficient for uniqueness
+                    conn.execute(text("CREATE INDEX idx_articles_url ON articles(url(255))"))
                     conn.commit()
                 
                 if 'idx_articles_content_hash' not in existing_indexes:
