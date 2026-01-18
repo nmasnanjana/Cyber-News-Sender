@@ -218,30 +218,33 @@ class Database:
                 existing_indexes = [row[0] for row in result]
                 
                 # Create indexes if they don't exist (MySQL syntax)
-                if 'idx_articles_date' not in existing_indexes:
-                    conn.execute(text("CREATE INDEX idx_articles_date ON articles(date)"))
-                    conn.commit()
+                # Wrap each in try-except to handle race conditions and duplicate key errors gracefully
+                index_creations = [
+                    ('idx_articles_date', "CREATE INDEX idx_articles_date ON articles(date)"),
+                    ('idx_articles_source', "CREATE INDEX idx_articles_source ON articles(source)"),
+                    ('idx_articles_url', "CREATE INDEX idx_articles_url ON articles(url(255))"),
+                    ('idx_articles_content_hash', "CREATE INDEX idx_articles_content_hash ON articles(content_hash)"),
+                    ('idx_articles_last_sent_at', "CREATE INDEX idx_articles_last_sent_at ON articles(last_sent_at)")
+                ]
                 
-                if 'idx_articles_source' not in existing_indexes:
-                    conn.execute(text("CREATE INDEX idx_articles_source ON articles(source)"))
-                    conn.commit()
-                
-                if 'idx_articles_url' not in existing_indexes:
-                    # Use prefix index for URL (max 255 chars) to avoid "key too long" error
-                    # MySQL has a limit of 3072 bytes for index keys (utf8mb4 = 4 bytes per char = 768 chars max)
-                    # URLs can be up to 1000 chars, so we use a prefix of 255 chars which is sufficient for uniqueness
-                    conn.execute(text("CREATE INDEX idx_articles_url ON articles(url(255))"))
-                    conn.commit()
-                
-                if 'idx_articles_content_hash' not in existing_indexes:
-                    conn.execute(text("CREATE INDEX idx_articles_content_hash ON articles(content_hash)"))
-                    conn.commit()
-                
-                if 'idx_articles_last_sent_at' not in existing_indexes:
-                    conn.execute(text("CREATE INDEX idx_articles_last_sent_at ON articles(last_sent_at)"))
-                    conn.commit()
+                for index_name, create_sql in index_creations:
+                    if index_name not in existing_indexes:
+                        try:
+                            conn.execute(text(create_sql))
+                            conn.commit()
+                        except Exception as idx_error:
+                            # Ignore duplicate key errors (1061) - index might have been created by another process
+                            error_str = str(idx_error)
+                            if '1061' in error_str or 'Duplicate key name' in error_str:
+                                # Index already exists, ignore
+                                pass
+                            else:
+                                logger.warning(f"Index creation warning for {index_name}: {idx_error}")
         except Exception as e:
-            logger.warning(f"Index creation warning: {e}")
+            # Only log if it's not a duplicate key error
+            error_str = str(e)
+            if '1061' not in error_str and 'Duplicate key name' not in error_str:
+                logger.warning(f"Index creation warning: {e}")
     
     def get_content_hash(self, url, title):
         """Generate hash for duplicate detection."""

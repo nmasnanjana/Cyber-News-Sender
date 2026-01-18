@@ -278,6 +278,52 @@ docker-compose exec cyber-news service cron status
 2. Check cron configuration: `docker-compose exec cyber-news crontab -l`
 3. View cron logs in container logs
 
+## Testing Email Sending
+
+### Manual Email Testing
+
+Articles are marked as sent after successful email delivery to prevent duplicates. To test email sending manually, you need to reset the `last_sent_at` field.
+
+#### Option 1: Using the Reset Script (Recommended)
+
+A utility script is provided to easily reset articles for testing:
+
+```bash
+# Check current status
+docker exec -it cyber-news-sender python3 /app/reset_articles_for_testing.py --status
+
+# Reset today's articles (so they can be sent again)
+docker exec -it cyber-news-sender python3 /app/reset_articles_for_testing.py --reset-today
+
+# Reset a specific article by ID
+docker exec -it cyber-news-sender python3 /app/reset_articles_for_testing.py --reset-id <ARTICLE_ID>
+
+# Reset ALL articles (with confirmation prompt)
+docker exec -it cyber-news-sender python3 /app/reset_articles_for_testing.py --reset-all
+```
+
+After resetting, run the email script:
+```bash
+docker exec -it cyber-news-sender python3 /app/send_daily_email.py
+```
+
+#### Option 2: Using SQL Commands
+
+You can also reset articles directly via MySQL:
+
+```bash
+# Get MySQL password from your .env file first, then:
+docker exec -it cyber-news-mysql mysql -u cybernews -p'YOUR_PASSWORD' cyber_news -e "UPDATE articles SET last_sent_at = NULL WHERE DATE(date) = CURDATE();"
+
+# Or reset all articles
+docker exec -it cyber-news-mysql mysql -u cybernews -p'YOUR_PASSWORD' cyber_news -e "UPDATE articles SET last_sent_at = NULL;"
+
+# Check which articles are marked as sent
+docker exec -it cyber-news-mysql mysql -u cybernews -p'YOUR_PASSWORD' cyber_news -e "SELECT id, title, last_sent_at FROM articles WHERE DATE(date) = CURDATE() ORDER BY id DESC LIMIT 10;"
+```
+
+**Note**: Replace `YOUR_PASSWORD` with your actual MySQL password from `config/.env`. If your password contains special characters, you may need to escape them or use the reset script instead.
+
 ## Development
 
 ### Running Locally (without Docker)
