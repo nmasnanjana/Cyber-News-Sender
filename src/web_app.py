@@ -4,7 +4,7 @@ Web Dashboard for Cyber News Sender
 Enhanced UI with graphs, summaries, and CVE details
 """
 
-from flask import Flask, render_template_string, jsonify, request, Response
+from flask import Flask, render_template_string, jsonify, request, Response, send_from_directory
 from .database import Database, Article, Recipient
 from datetime import datetime, timedelta
 import json
@@ -19,7 +19,11 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', 'config', 
 from .security import add_security_headers, rate_limit, validate_input, sanitize_json_input, GDPRCompliance
 from .utils import is_valid_cve, sanitize_email, escape_html, sanitize_string
 
-app = Flask(__name__)
+# Get the project root directory
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+STATIC_FOLDER = os.path.join(PROJECT_ROOT, 'static')
+
+app = Flask(__name__, static_folder=STATIC_FOLDER)
 db = Database()
 logger = logging.getLogger('cyber_news')
 
@@ -37,6 +41,7 @@ DASHBOARD_HTML = r"""
     <title>Cyber News Dashboard</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="/static/favicon.png">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         * {
@@ -1035,6 +1040,7 @@ ARCHIVE_HTML = r"""
     <title>Older News - Cyber News Dashboard</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="/static/favicon.png">
     <style>
         * {
             margin: 0;

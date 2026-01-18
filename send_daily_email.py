@@ -22,11 +22,11 @@ def main():
         # Initialize email sender (uses database)
         sender = CyberNewsEmailSender(use_db=True)
         
-        # Get articles from database (today's articles that haven't been sent yet)
-        articles_for_email = sender.db.get_unsent_articles_today(limit=100)
+        # Get all unsent articles from database (regardless of date)
+        articles_for_email = sender.db.get_unsent_articles(limit=100)
         
         if not articles_for_email:
-            logger.info("No unsent articles found for today. Email not sent.")
+            logger.info("No unsent articles found. Email not sent.")
             return
         
         logger.info(f"Found {len(articles_for_email)} articles to send")

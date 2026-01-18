@@ -425,24 +425,23 @@ class Database:
             Article.date >= today
         ).order_by(Article.date.desc()).all()
     
+    def get_unsent_articles(self, limit=100):
+        """
+        Get all articles that haven't been sent yet (regardless of date).
+        This allows sending all unsent articles in daily emails.
+        """
+        # Get articles that have never been sent (last_sent_at is NULL)
+        return self.session.query(Article).filter(
+            Article.last_sent_at.is_(None)
+        ).order_by(Article.date.desc()).limit(limit).all()
+    
     def get_unsent_articles_today(self, limit=100):
         """
-        Get articles from today that haven't been sent yet (or weren't sent today).
-        This prevents duplicate email sends on the same day.
+        DEPRECATED: Use get_unsent_articles() instead.
+        Kept for backward compatibility.
+        Get all articles that haven't been sent yet (regardless of date).
         """
-        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-        today_date = datetime.utcnow().date()
-        
-        # Get articles from today that either:
-        # 1. Have never been sent (last_sent_at is NULL), OR
-        # 2. Were sent before today (last_sent_at < today_start)
-        return self.session.query(Article).filter(
-            Article.date >= today_date,
-            (
-                (Article.last_sent_at.is_(None)) |
-                (Article.last_sent_at < today_start)
-            )
-        ).order_by(Article.date.desc()).limit(limit).all()
+        return self.get_unsent_articles(limit=limit)
     
     def mark_articles_as_sent(self, article_ids):
         """

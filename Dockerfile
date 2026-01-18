@@ -21,6 +21,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src/ /app/src/
 COPY main.py .
 COPY send_daily_email.py .
+COPY static/ /app/static/
 COPY config/ /app/config/
 
 # Create directories for logs only (no data directory needed with MySQL)
