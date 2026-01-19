@@ -1683,14 +1683,15 @@ def subscribe():
 def get_stats():
     """Get statistics for last 7 days."""
     try:
-        # Get date range for last 7 days
-        seven_days_ago = datetime.now().date() - timedelta(days=7)
-        today = datetime.now().date()
+        # Use datetime boundaries (DateTime column) to avoid MySQL date-vs-datetime coercion bugs
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        tomorrow_start = today_start + timedelta(days=1)
+        seven_days_ago_start = today_start - timedelta(days=7)
         
         # Get articles from last 7 days only
         recent_articles = db.session.query(Article).filter(
-            Article.date >= seven_days_ago,
-            Article.date <= today
+            Article.date >= seven_days_ago_start,
+            Article.date < tomorrow_start
         ).all()
         
         total = db.session.query(Article).count()
@@ -1740,13 +1741,14 @@ def get_stats():
         time_data = {}
         time_labels = []
         for i in range(7):
-            date = datetime.now().date() - timedelta(days=i)
+            day_start = today_start - timedelta(days=i)
+            next_day_start = day_start + timedelta(days=1)
             count = db.session.query(Article).filter(
-                Article.date >= date,
-                Article.date < date + timedelta(days=1)
+                Article.date >= day_start,
+                Article.date < next_day_start
             ).count()
-            time_data[date.isoformat()] = count
-            time_labels.append(date.strftime('%b %d'))
+            time_data[day_start.date().isoformat()] = count
+            time_labels.append(day_start.strftime('%b %d'))
         
         # Prepare category heatmap data (top 20, last 7 days)
         category_heatmap = sorted(categories.items(), key=lambda x: x[1], reverse=True)[:20]
@@ -1785,8 +1787,9 @@ def get_articles():
         category = request.args.get('category', '')
         
         # Get today's articles
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
         today_query = db.session.query(Article).filter(
-            Article.date >= datetime.now().date()
+            Article.date >= today_start
         )
         if search:
             today_query = today_query.filter(Article.title.contains(search))
@@ -1797,10 +1800,10 @@ def get_articles():
         today_articles = today_query.order_by(Article.date.desc()).limit(limit).all()
         
         # Get yesterday's articles
-        yesterday = datetime.now().date() - timedelta(days=1)
+        yesterday_start = today_start - timedelta(days=1)
         yesterday_query = db.session.query(Article).filter(
-            Article.date >= yesterday,
-            Article.date < datetime.now().date()
+            Article.date >= yesterday_start,
+            Article.date < today_start
         )
         if search:
             yesterday_query = yesterday_query.filter(Article.title.contains(search))
@@ -1953,14 +1956,15 @@ def get_archive_articles():
         days = request.args.get('days', '')
         
         # Calculate date cutoff (exclude today and yesterday)
-        yesterday = datetime.now().date() - timedelta(days=1)
-        query = db.session.query(Article).filter(Article.date < yesterday)
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        yesterday_start = today_start - timedelta(days=1)
+        query = db.session.query(Article).filter(Article.date < yesterday_start)
         
         # Apply date filter if specified
         if days:
             days_int = int(days)
-            cutoff_date = datetime.now().date() - timedelta(days=days_int)
-            query = query.filter(Article.date >= cutoff_date)
+            cutoff_start = today_start - timedelta(days=days_int)
+            query = query.filter(Article.date >= cutoff_start)
         
         # Apply filters
         if search:

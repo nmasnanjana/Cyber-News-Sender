@@ -15,22 +15,23 @@ class Analytics:
     def generate_daily_stats(self):
         """Generate statistics for today."""
         try:
-            today = datetime.now().date()
+            # Use datetime boundaries (DateTime columns) to avoid MySQL date-vs-datetime coercion bugs
+            today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
             
             # Articles scraped today
             articles_today = self.db.session.query(Article).filter(
-                Article.created_at >= today
+                Article.created_at >= today_start
             ).count()
             
             # Articles sent today
             emails_today = self.db.session.query(EmailLog).filter(
-                EmailLog.sent_at >= today
+                EmailLog.sent_at >= today_start
             ).all()
             articles_sent = sum(e.article_count for e in emails_today)
             
             # Unique CVEs today
             articles_with_cves = self.db.session.query(Article).filter(
-                Article.created_at >= today,
+                Article.created_at >= today_start,
                 Article.cve_numbers.isnot(None)
             ).all()
             unique_cves = set()
@@ -42,7 +43,7 @@ class Analytics:
             # Source counts
             sources = {}
             articles = self.db.session.query(Article).filter(
-                Article.created_at >= today
+                Article.created_at >= today_start
             ).all()
             for article in articles:
                 sources[article.source] = sources.get(article.source, 0) + 1
@@ -61,7 +62,7 @@ class Analytics:
             logger.info(f"Generated daily stats: {articles_today} articles, {len(unique_cves)} CVEs")
             
             return {
-                'date': today.isoformat(),
+                'date': today_start.date().isoformat(),
                 'articles_scraped': articles_today,
                 'articles_sent': articles_sent,
                 'unique_cves': len(unique_cves),
