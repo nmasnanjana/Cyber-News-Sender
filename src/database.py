@@ -325,17 +325,31 @@ class Database:
         # Bulk check which articles already exist
         existing_hashes = self.articles_exist_bulk(content_hashes)
         
-        # Prepare new articles
+        # Prepare new articles with validation
         new_articles = []
         for article_data, content_hash in articles_to_add:
             if content_hash in existing_hashes:
                 continue  # Skip existing articles
             
+            # Validate required fields
+            title = article_data.get('title', '').strip()
+            url = article_data.get('url', '').strip()
+            source = article_data.get('source', '').strip()
+            date = article_data.get('date')
+            
+            if not title or not url or not source:
+                logger.warning(f"Skipping article in batch insert - missing required fields: title={bool(title)}, url={bool(url)}, source={bool(source)}")
+                continue
+            
+            if date is None:
+                logger.warning(f"Skipping article in batch insert - missing date: {title[:50]}...")
+                continue
+            
             article = Article(
-                title=article_data.get('title', ''),
-                url=article_data.get('url', ''),
-                source=article_data.get('source', ''),
-                date=article_data.get('date'),
+                title=title,
+                url=url,
+                source=source,
+                date=date,
                 content_hash=content_hash,
                 cve_numbers=json.dumps(article_data.get('cve_numbers')) if article_data.get('cve_numbers') else None,
                 mitre_attack_ids=json.dumps(article_data.get('mitre_attack_ids')) if article_data.get('mitre_attack_ids') else None,
@@ -411,18 +425,20 @@ class Database:
     
     def get_yesterday_articles(self):
         """Get articles from yesterday."""
-        yesterday = datetime.utcnow().date() - timedelta(days=1)
-        today = datetime.utcnow().date()
+        # Use datetime boundaries (DateTime column) to avoid MySQL date-vs-datetime coercion bugs
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        yesterday_start = today_start - timedelta(days=1)
         return self.session.query(Article).filter(
-            Article.date >= yesterday,
-            Article.date < today
+            Article.date >= yesterday_start,
+            Article.date < today_start
         ).order_by(Article.date.desc()).all()
     
     def get_today_articles(self):
         """Get articles from today."""
-        today = datetime.utcnow().date()
+        # Use datetime boundary (DateTime column) to avoid MySQL date-vs-datetime coercion bugs
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
         return self.session.query(Article).filter(
-            Article.date >= today
+            Article.date >= today_start
         ).order_by(Article.date.desc()).all()
     
     def get_unsent_articles(self, limit=100):

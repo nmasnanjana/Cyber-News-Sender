@@ -6,7 +6,7 @@ Scrapes latest cybersecurity news, vulnerabilities, and exploitations from multi
 
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import time
 import re
 import os
@@ -28,7 +28,8 @@ class CyberNewsScraper:
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         })
-        self.today = datetime.now().date()
+        # Use UTC for consistency with database (created_at uses datetime.utcnow())
+        self.today = datetime.utcnow().date()
         self.max_age_days = max_age_days
         self.use_db = use_db
         
@@ -339,21 +340,15 @@ class CyberNewsScraper:
                     try:
                         # Parse various date formats
                         date_str = date_elem.text.strip()
-                        # Try ISO format first (Atom)
-                        if 'T' in date_str:
-                            try:
-                                article_date = datetime.fromisoformat(date_str.replace('Z', '+00:00')).date()
-                            except:
-                                pass
+                        # Use utility function for consistent date parsing
+                        from .utils import parse_date
+                        parsed_dt = parse_date(date_str)
+                        if parsed_dt:
+                            article_date = parsed_dt.date()
                         else:
-                            # Try common RSS date formats
-                            for fmt in ['%a, %d %b %Y %H:%M:%S %z', '%a, %d %b %Y %H:%M:%S %Z', '%Y-%m-%d', '%d %b %Y', '%a, %d %b %Y']:
-                                try:
-                                    article_date = datetime.strptime(date_str, fmt).date()
-                                    break
-                                except:
-                                    continue
-                    except:
+                            logger.debug(f"Could not parse date from RSS: {date_str}")
+                    except Exception as e:
+                        logger.debug(f"Error parsing date from RSS feed: {e}")
                         pass
                 
                 # REQUIRE: title, url, and date must all be present (not null)
@@ -546,18 +541,38 @@ class CyberNewsScraper:
                 articles_to_save = []
                 
                 for article in recent_articles:
-                    title = article.get('title', '')
-                    url = article.get('url', '')
-                    source = article.get('source', '')
+                    title = article.get('title', '').strip()
+                    url = article.get('url', '').strip()
+                    source = article.get('source', '').strip()
                     date_str = article.get('date')
                     
-                    # Parse date
+                    # Validate required fields before processing
+                    if not title or not url or not source:
+                        logger.warning(f"Skipping article with missing required fields: title={bool(title)}, url={bool(url)}, source={bool(source)}")
+                        continue
+                    
+                    # Parse date - use utility function for consistent parsing
                     date_obj = None
                     if date_str:
-                        try:
-                            date_obj = datetime.fromisoformat(date_str.split('T')[0])
-                        except:
-                            pass
+                        from .utils import parse_date
+                        parsed_dt = parse_date(date_str)
+                        if parsed_dt:
+                            # Convert to naive UTC datetime at midnight for MySQL compatibility
+                            # MySQL DateTime columns don't store timezone, so we use naive UTC datetimes
+                            if parsed_dt.tzinfo is not None:
+                                # Convert timezone-aware datetime to UTC, then make naive
+                                date_obj = parsed_dt.astimezone(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+                                date_obj = date_obj.replace(tzinfo=None)
+                            else:
+                                # Already naive, assume UTC and set to midnight
+                                date_obj = datetime.combine(parsed_dt.date(), datetime.min.time())
+                        else:
+                            logger.warning(f"Failed to parse date '{date_str}' for article: {title[:50]}...")
+                            # Don't save articles with invalid dates - skip this article
+                            continue
+                    else:
+                        logger.warning(f"Article missing date field: {title[:50]}...")
+                        continue
                     
                     # Extract security IDs from title
                     title_ids = self.cve_extractor.extract_all_ids(title)
