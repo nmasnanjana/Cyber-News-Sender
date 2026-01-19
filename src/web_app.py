@@ -1786,10 +1786,11 @@ def get_articles():
         source = request.args.get('source', '')
         category = request.args.get('category', '')
         
-        # Get today's articles
+        # Get today's articles (scraped today, not published today)
+        # Use created_at since RSS feeds often have old publication dates
         today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
         today_query = db.session.query(Article).filter(
-            Article.date >= today_start
+            Article.created_at >= today_start
         )
         if search:
             today_query = today_query.filter(Article.title.contains(search))
@@ -1797,13 +1798,13 @@ def get_articles():
             today_query = today_query.filter_by(source=source)
         if category:
             today_query = today_query.filter(Article.categories.contains(f'"{category}"'))
-        today_articles = today_query.order_by(Article.date.desc()).limit(limit).all()
+        today_articles = today_query.order_by(Article.created_at.desc()).limit(limit).all()
         
-        # Get yesterday's articles
+        # Get yesterday's articles (scraped yesterday, not published yesterday)
         yesterday_start = today_start - timedelta(days=1)
         yesterday_query = db.session.query(Article).filter(
-            Article.date >= yesterday_start,
-            Article.date < today_start
+            Article.created_at >= yesterday_start,
+            Article.created_at < today_start
         )
         if search:
             yesterday_query = yesterday_query.filter(Article.title.contains(search))
@@ -1811,7 +1812,7 @@ def get_articles():
             yesterday_query = yesterday_query.filter_by(source=source)
         if category:
             yesterday_query = yesterday_query.filter(Article.categories.contains(f'"{category}"'))
-        yesterday_articles = yesterday_query.order_by(Article.date.desc()).limit(limit).all()
+        yesterday_articles = yesterday_query.order_by(Article.created_at.desc()).limit(limit).all()
         
         sources = [s[0] for s in db.session.query(Article.source).distinct().all()]
         

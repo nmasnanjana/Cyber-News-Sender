@@ -424,22 +424,24 @@ class Database:
         ).order_by(Article.date.desc()).limit(limit).all()
     
     def get_yesterday_articles(self):
-        """Get articles from yesterday."""
-        # Use datetime boundaries (DateTime column) to avoid MySQL date-vs-datetime coercion bugs
+        """Get articles scraped yesterday (based on created_at, not publication date)."""
+        # Use created_at to show articles scraped yesterday
+        # This makes more sense than using publication date since RSS feeds often have old dates
         today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
         yesterday_start = today_start - timedelta(days=1)
         return self.session.query(Article).filter(
-            Article.date >= yesterday_start,
-            Article.date < today_start
-        ).order_by(Article.date.desc()).all()
+            Article.created_at >= yesterday_start,
+            Article.created_at < today_start
+        ).order_by(Article.created_at.desc()).all()
     
     def get_today_articles(self):
-        """Get articles from today."""
-        # Use datetime boundary (DateTime column) to avoid MySQL date-vs-datetime coercion bugs
+        """Get articles scraped today (based on created_at, not publication date)."""
+        # Use created_at to show articles scraped in the last 24 hours
+        # This makes more sense than using publication date since RSS feeds often have old dates
         today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
         return self.session.query(Article).filter(
-            Article.date >= today_start
-        ).order_by(Article.date.desc()).all()
+            Article.created_at >= today_start
+        ).order_by(Article.created_at.desc()).all()
     
     def get_unsent_articles(self, limit=100):
         """
