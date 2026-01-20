@@ -27,6 +27,34 @@ app = Flask(__name__, static_folder=STATIC_FOLDER)
 db = Database()
 logger = logging.getLogger('cyber_news')
 
+def handle_db_error(func):
+    """Decorator to handle database session errors with rollback."""
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            # Rollback any pending transaction
+            try:
+                db.session.rollback()
+                # Refresh the session to clear any stale state
+                db.session.expire_all()
+            except Exception as rollback_error:
+                logger.error(f"Error during rollback in {func.__name__}: {rollback_error}")
+                # If rollback fails, try to refresh the session connection
+                try:
+                    db.session.close()
+                    from sqlalchemy.orm import sessionmaker
+                    Session = sessionmaker(bind=db.engine)
+                    db.session = Session()
+                except Exception as refresh_error:
+                    logger.error(f"Error refreshing session in {func.__name__}: {refresh_error}")
+            # Log the error
+            logger.error(f"Error in {func.__name__}: {e}", exc_info=True)
+            # Re-raise to be handled by Flask's error handler
+            raise
+    wrapper.__name__ = func.__name__
+    return wrapper
+
 # Add security headers to all responses
 @app.after_request
 def after_request(response):
@@ -1626,6 +1654,7 @@ def archive():
 
 @app.route('/api/subscribe', methods=['POST'])
 @rate_limit(max_requests=5, window_seconds=300)  # 5 requests per 5 minutes
+@handle_db_error
 def subscribe():
     """Subscribe an email address to daily cyber news (GDPR compliant)."""
     try:
@@ -1680,6 +1709,7 @@ def subscribe():
         return jsonify({'success': False, 'message': 'An error occurred. Please try again later.'}), 500
 
 @app.route('/api/stats')
+@handle_db_error
 def get_stats():
     """Get statistics for last 7 days."""
     try:
@@ -1688,10 +1718,10 @@ def get_stats():
         tomorrow_start = today_start + timedelta(days=1)
         seven_days_ago_start = today_start - timedelta(days=7)
         
-        # Get articles from last 7 days only
+        # Get articles from last 7 days - use created_at for consistency (articles scraped in last 7 days)
         recent_articles = db.session.query(Article).filter(
-            Article.date >= seven_days_ago_start,
-            Article.date < tomorrow_start
+            Article.created_at >= seven_days_ago_start,
+            Article.created_at < tomorrow_start
         ).all()
         
         total = db.session.query(Article).count()
@@ -1699,7 +1729,6 @@ def get_stats():
         yesterday_articles = db.get_yesterday_articles()
         
         # Get unique CVEs from last 7 days - validate CVE format strictly using utility function
-        
         unique_cves = set()
         for article in recent_articles:
             if article.cve_numbers:
@@ -1737,15 +1766,15 @@ def get_stats():
         # Sort and get top 10 CVEs
         top_cves = sorted(cve_counts.items(), key=lambda x: x[1], reverse=True)[:10]
         
-        # Get time distribution (last 7 days)
+        # Get time distribution (last 7 days) - use created_at for consistency
         time_data = {}
         time_labels = []
         for i in range(7):
             day_start = today_start - timedelta(days=i)
             next_day_start = day_start + timedelta(days=1)
             count = db.session.query(Article).filter(
-                Article.date >= day_start,
-                Article.date < next_day_start
+                Article.created_at >= day_start,
+                Article.created_at < next_day_start
             ).count()
             time_data[day_start.date().isoformat()] = count
             time_labels.append(day_start.strftime('%b %d'))
@@ -1776,9 +1805,12 @@ def get_stats():
             'time_data': list(time_data.values())[::-1]
         })
     except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error in get_stats: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/articles')
+@handle_db_error
 def get_articles():
     try:
         limit = int(request.args.get('limit', 50))
@@ -1822,6 +1854,8 @@ def get_articles():
             'sources': sources
         })
     except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error in get_articles: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/gdpr/export', methods=['POST'])
@@ -1935,17 +1969,21 @@ def rss_feed():
     return Response(rss_xml, mimetype='application/rss+xml')
 
 @app.route('/api/cve/<cve_id>')
+@handle_db_error
 def get_cve_articles(cve_id):
     """Get articles for specific CVE."""
     try:
         articles = db.session.query(Article).filter(
             Article.cve_numbers.contains(cve_id.upper())
-        ).order_by(Article.date.desc()).all()
+        ).order_by(Article.created_at.desc()).all()
         return jsonify({'cve': cve_id, 'articles': [a.to_dict() for a in articles]})
     except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error in get_cve_articles: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/archive')
+@handle_db_error
 def get_archive_articles():
     """Get older articles with pagination."""
     try:
@@ -1956,16 +1994,16 @@ def get_archive_articles():
         category = request.args.get('category', '')
         days = request.args.get('days', '')
         
-        # Calculate date cutoff (exclude today and yesterday)
+        # Calculate date cutoff (exclude today and yesterday) - use created_at for consistency
         today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
         yesterday_start = today_start - timedelta(days=1)
-        query = db.session.query(Article).filter(Article.date < yesterday_start)
+        query = db.session.query(Article).filter(Article.created_at < yesterday_start)
         
         # Apply date filter if specified
         if days:
             days_int = int(days)
             cutoff_start = today_start - timedelta(days=days_int)
-            query = query.filter(Article.date >= cutoff_start)
+            query = query.filter(Article.created_at >= cutoff_start)
         
         # Apply filters
         if search:
@@ -1981,7 +2019,7 @@ def get_archive_articles():
         
         # Apply pagination
         offset = (page - 1) * limit
-        articles = query.order_by(Article.date.desc()).offset(offset).limit(limit).all()
+        articles = query.order_by(Article.created_at.desc()).offset(offset).limit(limit).all()
         
         # Get sources for filter dropdown
         sources = [s[0] for s in db.session.query(Article.source).distinct().all()]
@@ -1994,22 +2032,30 @@ def get_archive_articles():
             'sources': sources
         })
     except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error in get_archive_articles: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/recipients', methods=['GET', 'POST'])
+@handle_db_error
 def manage_recipients():
     """Manage recipients."""
-    if request.method == 'GET':
-        recipients = db.session.query(Recipient).filter_by(active=True).all()
-        return jsonify({'recipients': [r.to_dict() for r in recipients]})
-    else:
-        data = request.json
-        email = data.get('email')
-        name = data.get('name')
-        if email:
-            recipient = db.add_recipient(email, name)
-            return jsonify({'success': True, 'recipient': recipient.to_dict()})
-        return jsonify({'error': 'Email required'}), 400
+    try:
+        if request.method == 'GET':
+            recipients = db.session.query(Recipient).filter_by(active=True).all()
+            return jsonify({'recipients': [r.to_dict() for r in recipients]})
+        else:
+            data = request.json
+            email = data.get('email')
+            name = data.get('name')
+            if email:
+                recipient = db.add_recipient(email, name)
+                return jsonify({'success': True, 'recipient': recipient.to_dict()})
+            return jsonify({'error': 'Email required'}), 400
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error in manage_recipients: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
 
 def create_app():
     """Create Flask app instance."""
